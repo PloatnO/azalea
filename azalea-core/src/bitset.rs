@@ -1,4 +1,6 @@
 use std::{
+    fmt,
+    hash::{Hash, Hasher},
     io::{self, Cursor, Write},
     ops::Range,
 };
@@ -178,12 +180,53 @@ impl From<Vec<u8>> for JavaBitSet {
 /// Minecraft, and may not be as performant as it could be for other purposes.
 /// Consider using [`FastFixedBitSet`] if you don't need the `AzBuf`
 /// implementation.
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct FixedBitSet<const N: usize>
 where
     [u8; bits_to_bytes(N)]: Sized,
 {
     data: [u8; bits_to_bytes(N)],
+}
+
+impl<const N: usize> Clone for FixedBitSet<N>
+where
+    [u8; bits_to_bytes(N)]: Sized,
+{
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<const N: usize> Copy for FixedBitSet<N> where [u8; bits_to_bytes(N)]: Sized {}
+
+impl<const N: usize> fmt::Debug for FixedBitSet<N>
+where
+    [u8; bits_to_bytes(N)]: Sized,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("FixedBitSet")
+            .field("data", &&self.data[..])
+            .finish()
+    }
+}
+
+impl<const N: usize> PartialEq for FixedBitSet<N>
+where
+    [u8; bits_to_bytes(N)]: Sized,
+{
+    fn eq(&self, other: &Self) -> bool {
+        self.data == other.data
+    }
+}
+
+impl<const N: usize> Eq for FixedBitSet<N> where [u8; bits_to_bytes(N)]: Sized {}
+
+impl<const N: usize> Hash for FixedBitSet<N>
+where
+    [u8; bits_to_bytes(N)]: Sized,
+{
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.data.hash(state);
+    }
 }
 
 impl<const N: usize> FixedBitSet<N>
@@ -209,11 +252,13 @@ where
     pub fn set(&mut self, bit_index: usize) {
         self.data[bit_index / 8] |= 1u8 << (bit_index % 8);
     }
+
     #[inline]
     pub fn unset(&mut self, bit_index: usize) {
         let byte = &mut self.data[bit_index / 8];
         *byte = !((!*byte) | (1u8 << (bit_index % 8)));
     }
+
     #[inline]
     pub fn set_to(&mut self, bit_index: usize, value: bool) {
         if value {
@@ -235,6 +280,7 @@ where
         }
         Ok(FixedBitSet { data })
     }
+
     fn azalea_write(&self, buf: &mut impl Write) -> io::Result<()> {
         for i in 0..bits_to_bytes(N) {
             self.data[i].azalea_write(buf)?;
@@ -242,6 +288,7 @@ where
         Ok(())
     }
 }
+
 // special case that makes #[var] FixedBitSet<32>, be represented as a varint :)
 impl AzBufVar for FixedBitSet<32>
 where
@@ -253,6 +300,7 @@ where
             data: data.to_be_bytes(),
         })
     }
+
     fn azalea_write_var(&self, buf: &mut impl Write) -> io::Result<()> {
         let data = u32::from_be_bytes(self.data);
         data.azalea_write_var(buf)
@@ -279,13 +327,55 @@ pub const fn bits_to_bytes(n: usize) -> usize {
 ///
 /// This is almost identical to [`FixedBitSet`], but more efficient (~20% faster
 /// access) and doesn't implement `AzBuf`.
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct FastFixedBitSet<const N: usize>
 where
     [u64; bits_to_longs(N)]: Sized,
 {
     data: [u64; bits_to_longs(N)],
 }
+
+impl<const N: usize> Clone for FastFixedBitSet<N>
+where
+    [u64; bits_to_longs(N)]: Sized,
+{
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<const N: usize> Copy for FastFixedBitSet<N> where [u64; bits_to_longs(N)]: Sized {}
+
+impl<const N: usize> fmt::Debug for FastFixedBitSet<N>
+where
+    [u64; bits_to_longs(N)]: Sized,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("FastFixedBitSet")
+            .field("data", &&self.data[..])
+            .finish()
+    }
+}
+
+impl<const N: usize> PartialEq for FastFixedBitSet<N>
+where
+    [u64; bits_to_longs(N)]: Sized,
+{
+    fn eq(&self, other: &Self) -> bool {
+        self.data == other.data
+    }
+}
+
+impl<const N: usize> Eq for FastFixedBitSet<N> where [u64; bits_to_longs(N)]: Sized {}
+
+impl<const N: usize> Hash for FastFixedBitSet<N>
+where
+    [u64; bits_to_longs(N)]: Sized,
+{
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.data.hash(state);
+    }
+}
+
 impl<const N: usize> FastFixedBitSet<N>
 where
     [u64; bits_to_longs(N)]: Sized,
@@ -308,6 +398,7 @@ where
         self.data[bit_index / 64] |= 1u64 << (bit_index % 64);
     }
 }
+
 impl<const N: usize> Default for FastFixedBitSet<N>
 where
     [u64; bits_to_longs(N)]: Sized,
@@ -316,6 +407,7 @@ where
         Self::new()
     }
 }
+
 pub const fn bits_to_longs(n: usize) -> usize {
     n.div_ceil(64)
 }
